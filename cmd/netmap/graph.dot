@@ -1,0 +1,19 @@
+{{$root := .}}
+strict graph {
+  layout=neato
+  {{range .Router -}}
+  "{{.ID}}" [shape=box{{if .Pos -}}
+  ,pos="{{.Pos}}!"
+  {{end -}}
+  {{if .Name -}}
+  ,label="{{.Name}}\n{{.ID}}"
+  {{end -}}
+  ]
+  {{end}}
+  {{range .Net -}}
+  "{{.ID}}"[{{if .Pos}}pos="{{.Pos}}!"{{end}}]
+  {{end}}
+  {{range .Link -}}
+  "{{.Router}}" -- "{{.Net}}"
+  {{end}}
+}

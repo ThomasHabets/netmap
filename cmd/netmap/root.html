@@ -1,0 +1,42 @@
+{{$root := . }}
+<html>
+  <head>
+    <title>Netmap</title>
+    <link rel="stylesheet" href="static/netmap.css">
+</head>
+  <body>
+    <div id="main">
+      <div id="main-map">
+	<object id="map-svg" data="/render" type="image/svg+xml"></object>
+      </div>
+      <div id="main-controls">
+	<select id="router-selector">
+	  {{range .Router}}
+	  <option id="router-select-{{.ID}}" data-pos="{{.Pos}}" data-id="{{.ID}}">
+	    {{if .Name}}
+	    {{.Name}} ({{.ID}})
+	    {{else}}
+	    {{.ID}}
+	    {{end}}
+	  </option>
+	  {{end}}
+	</select>
+	<select id="net-selector">
+	  {{range .Net}}
+	  <option id="net-select-{{.ID}}" data-pos="{{.Pos}}" data-id="{{.ID}}">
+	    {{.ID}}
+	  </option>
+	  {{end}}
+	</select>
+	<div id="controls">
+	  <input id="controls-left" type="button" value="←" />
+	  <input id="controls-up" type="button" value="↑" />
+	  <input id="controls-down" type="button" value="↓" />
+	  <input id="controls-right" type="button" value="→" />
+	  <input id="controls-pos" />
+	</div>
+      </div>
+    </div>
+  </body>
+  <script type="text/javascript" src="static/netmap.js"></script>
+</html>
