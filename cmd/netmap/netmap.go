@@ -42,7 +42,7 @@ func rootHandler(w http.ResponseWriter, req *http.Request) {
 	graph, err := generateGraphData(req.Context())
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Failed to generate graph", http.StatusInternalServerError)
 		return
 	}
 	if err := rootTmpl.Execute(w, graph); err != nil {
@@ -195,18 +195,25 @@ func updateHandler(w http.ResponseWriter, req *http.Request) {
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return
 	}
 	var u update
 	if err := json.Unmarshal(b, &u);err!=nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Failed to parse request JSON", http.StatusBadRequest)
 		return
 	}
-	if _, err := db.ExecContext(req.Context(), `UPDATE pos SET x=?,y=? WHERE id=?`,u.X,u.Y,id);err!= nil {
+	if res, err := db.ExecContext(req.Context(), `UPDATE pos SET x=?,y=? WHERE id=?`,u.X,u.Y,id);err!= nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Failed to update", http.StatusInternalServerError)
+		return
+	} else if n, err:=res.RowsAffected(); err  != nil {
+		log.Warningf("Failed to get rows affected for %q", id)
+		// Pretend to caller that it succeeded.
+	} else if n != 1 {
+		log.Errorf("Nothing updated. Does node %q not exist?", id)
+		http.Error(w, "Nothing updated", http.StatusInternalServerError)
 		return
 	}
 }
@@ -215,7 +222,7 @@ func renderHandler(w http.ResponseWriter, req *http.Request) {
 	dot, err := generateDot(req.Context())
 	if err != nil {
 		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Failed to generate dot", http.StatusInternalServerError)
 		return
 	}
 
