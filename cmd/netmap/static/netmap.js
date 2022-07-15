@@ -1,8 +1,20 @@
 
 function reload_map() {
-    let o = document.getElementById('map-svg');
-    o.data = null;
+    let parent = document.getElementById('main-map');
+    let oldo = document.getElementById('map-svg');
+    let o = document.createElement('object');
+    o.onload = (e) => {
+	parent.removeChild(oldo);
+	o.style = '';
+	//o.style.visibility = 'visible';
+	o.id = 'map-svg';
+    };
+    o.type = 'image/svg+xml';
     o.data = '/render';
+    //o.style.visibility = 'hidden';
+    //o.style="position:absolute;left:100000px"
+    o.style = 'position: absolute; opacity: 0; z-index: -10000; height: 10px'
+    parent.appendChild(o);
 }
 
 function router_change_onchange(e) {

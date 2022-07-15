@@ -13,4 +13,6 @@
 }
 #main-controls {
     width: 10%;
+/*    float: right; */
+    position: relative;
 }
