@@ -255,6 +255,7 @@ func renderHandler(w http.ResponseWriter, req *http.Request) {
 
 func main() {
 	flag.Parse()
+	ctx := context.Background()
 
 	var err error
 	db, err = sql.Open("sqlite3", "netmap.sqlite")
@@ -262,7 +263,11 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
-	
+
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+		log.Fatalf("Failed to turn on foreign keys: %v", err)
+	}
+
 	log.Info("Running…")
 
 	r := mux.NewRouter()

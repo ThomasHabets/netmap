@@ -22,6 +22,10 @@ func main() {
 	}
 	defer db.Close()
 
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+		log.Fatalf("Failed to turn on foreign keys: %v", err)
+	}
+
 	r := csv.NewReader(os.Stdin)
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
