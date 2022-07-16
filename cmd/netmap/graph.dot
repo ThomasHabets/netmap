@@ -14,6 +14,6 @@ strict graph {
   "{{.ID}}"[{{if .Pos}}pos="{{.Pos}}!"{{end}}]
   {{end}}
   {{range .Link -}}
-  "{{.Router}}" -- "{{.Net}}"
+  "{{.Router}}" -- "{{.Net}}"[label="Cost: {{.Cost}}"]
   {{end}}
 }

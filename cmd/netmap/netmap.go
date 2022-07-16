@@ -157,7 +157,8 @@ func generateGraphData(ctx context.Context) (*graphData, error) {
 		}
 		graph.Link = append(graph.Link, Link{
 			Router: router,
-			Net: link,
+			Net:    link,
+			Cost:   cost,
 		})
 		seen[router] = true
 		seen[link] = true
