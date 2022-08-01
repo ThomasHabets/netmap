@@ -10,6 +10,11 @@
 	<object id="map-svg" data="/render" type="image/svg+xml"></object>
       </div>
       <div id="main-controls">
+	<select id="layout-selector">
+	  {{range .Layouts}}
+	  <option data-layout="{{.}}">{{.}}</option>
+	  {{end}}
+	</select>
 	<select id="router-selector">
 	  {{range .Router}}
 	  <option id="router-select-{{.ID}}" data-pos="{{.Pos}}" data-id="{{.ID}}">

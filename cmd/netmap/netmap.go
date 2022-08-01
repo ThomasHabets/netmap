@@ -81,11 +81,12 @@ type Link struct {
 }
 
 type graphData struct {
-	Layout string
-	Router []Router
-	Net    []Net
-	Link   []Link
-	Neigh  []neigh
+	Layout  string
+	Layouts []string
+	Router  []Router
+	Net     []Net
+	Link    []Link
+	Neigh   []neigh
 }
 
 func getPositions(ctx context.Context) (map[string]string, error) {
@@ -186,8 +187,9 @@ func generateGraphData(ctx context.Context, layout string) (*graphData, error) {
 	}
 
 	graph := graphData{
-		Layout: layout,
-		Neigh:  neigh,
+		Layouts: []string{"neato", "circo", "fdp"},
+		Layout:  layout,
+		Neigh:   neigh,
 	}
 	rows, err := db.QueryContext(ctx, `
 SELECT links.router, net, cost FROM links

@@ -1,3 +1,4 @@
+var layout = "neato";
 
 function reload_map() {
     let parent = document.getElementById('main-map');
@@ -10,7 +11,7 @@ function reload_map() {
 	o.id = 'map-svg';
     };
     o.type = 'image/svg+xml';
-    o.data = '/render';
+    o.data = `/render?layout=${layout}`;
     //o.style.visibility = 'hidden';
     //o.style="position:absolute;left:100000px"
     o.style = 'position: absolute; opacity: 0; z-index: -10000; height: 10px'
@@ -18,7 +19,7 @@ function reload_map() {
 }
 
 function router_change_onchange(e) {
-    var o = e.target.options[e.target.selectedIndex];
+    let o = e.target.options[e.target.selectedIndex];
 
     let controls = document.getElementById('controls');
     controls.style.display='none';
@@ -65,6 +66,13 @@ window.addEventListener('load', (event) => {
     document.getElementById('router-selector').addEventListener('change', router_change_onchange);
     document.getElementById('net-selector').addEventListener('change', router_change_onchange);
     document.getElementById('controls-pos').addEventListener('keypress', controls_pos_keypress);
+
+    document.getElementById('layout-selector').addEventListener('change', (o) => {
+	console.log("Changing layout");
+	layout = o.target.options[o.target.selectedIndex].dataset.layout;
+	reload_map();
+    });
+
     [
 	["controls-left", [-1,0], controls_click],
 	["controls-up",   [0,1], controls_click],
