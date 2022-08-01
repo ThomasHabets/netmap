@@ -1,3 +1,9 @@
+CREATE TABLE neigh(
+       node1_id STRING NOT NULL,
+       link1 STRING NOT NULL,
+       node2_id STRING NOT NULL,
+       link2 STRING NOT NULL,
+       PRIMARY KEY(node1_id, link1, node2_id, link2));
 CREATE TABLE nodenames(
        node_id STRING NOT NULL,
        name STRING NOT NULL,

@@ -1,19 +1,25 @@
 {{$root := .}}
 strict graph {
-  layout=neato
+        {{/*}}
+	dot neato fdp sfdp circo twopi osage
+	Useful; dot, neato (allows manual), fdp, sfdp, circo
+	{{*/}}
+  layout={{.Layout}}
   {{range .Router -}}
   "{{.ID}}" [shape=box{{if .Pos -}}
   ,pos="{{.Pos}}!"
-  {{end -}}
-  {{if .Name -}}
+  {{- end -}}
+  {{- if .Name -}}
   ,label="{{.Name}}\n{{.ID}}"
-  {{end -}}
-  ]
+  {{- end -}}]
   {{end}}
   {{range .Net -}}
-  "{{.ID}}"[{{if .Pos}}pos="{{.Pos}}!"{{end}}]
+  "{{.ID}}"[{{if .Pos}}pos="{{.Pos}}!"{{end}}{{if .Missing}}color="red"{{end}}]
   {{end}}
   {{range .Link -}}
   "{{.Router}}" -- "{{.Net}}"[label="Cost: {{.Cost}}"]
+  {{end}}
+  {{range .Neigh -}}
+  "{{.Node1}}" -- "{{.Node2}}" [label="{{.Link1}},{{.Link2}}",color="blue"]
   {{end}}
 }

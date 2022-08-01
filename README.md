@@ -3,8 +3,7 @@
 
 ### FRR / Quagga
 ```
-sudo vtysh -c 'show ipv ospf database intra-prefix detail json' \
-    | jq -r '.areaScopedLinkStateDb | .[].lsa | .[] | .advertisingRouter as $adv | .prefix | .[] | [$adv,.prefix,.metric] | @csv' | ./import
+sudo vtysh -c 'show ipv ospf database detail json' | ./import
 ```
 
 ## TODO

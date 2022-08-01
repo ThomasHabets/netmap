@@ -9,8 +9,10 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"os/exec"
 	"sort"
 	"strings"
@@ -24,6 +26,8 @@ import (
 const (
 	// TODO
 	mapName = "main"
+
+	defaultLayout = "neato"
 )
 
 var (
@@ -41,10 +45,12 @@ var (
 	fs embed.FS
 
 	db *sql.DB
+
+	dbName = flag.String("db", "netmap.sqlite", "SQLite database.")
 )
 
 func rootHandler(w http.ResponseWriter, req *http.Request) {
-	graph, err := generateGraphData(req.Context())
+	graph, err := generateGraphData(req.Context(), defaultLayout)
 	if err != nil {
 		log.Error(err)
 		http.Error(w, "Failed to generate graph", http.StatusInternalServerError)
@@ -63,8 +69,9 @@ type Router struct {
 }
 
 type Net struct {
-	ID  string
-	Pos string
+	ID      string
+	Pos     string
+	Missing bool
 }
 
 type Link struct {
@@ -74,9 +81,11 @@ type Link struct {
 }
 
 type graphData struct {
+	Layout string
 	Router []Router
 	Net    []Net
 	Link   []Link
+	Neigh  []neigh
 }
 
 func getPositions(ctx context.Context) (map[string]string, error) {
@@ -130,7 +139,37 @@ ORDER BY node_id`)
 	return ret, nil
 }
 
-func generateGraphData(ctx context.Context) (*graphData, error) {
+type neigh struct {
+	Node1 string
+	Link1 string
+	Node2 string
+	Link2 string
+}
+
+func getNeigh(ctx context.Context) ([]neigh, error) {
+	var ret []neigh
+	rows, err := db.QueryContext(ctx, `
+SELECT node1_id,link1, node2_id, link2
+FROM neigh
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p neigh
+		if err := rows.Scan(&p.Node1, &p.Link1, &p.Node2, &p.Link2); err != nil {
+			return nil, err
+		}
+		ret = append(ret, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func generateGraphData(ctx context.Context, layout string) (*graphData, error) {
 	poss, err := getPositions(ctx)
 	if err != nil {
 		return nil, err
@@ -141,8 +180,27 @@ func generateGraphData(ctx context.Context) (*graphData, error) {
 		return nil, err
 	}
 
-	var graph graphData
-	rows, err := db.QueryContext(ctx, `SELECT router, net, cost FROM links`)
+	neigh, err := getNeigh(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	graph := graphData{
+		Layout: layout,
+		Neigh:  neigh,
+	}
+	rows, err := db.QueryContext(ctx, `
+SELECT links.router, net, cost FROM links
+JOIN mapnodes ON links.router=mapnodes.router
+JOIN maps ON mapnodes.map_id=mapnodes.map_id
+WHERE maps.name=?
+AND links.net IN (
+  SELECT mapnodes.router
+  FROM mapnodes
+  JOIN maps ON mapnodes.map_id=mapnodes.map_id
+  WHERE maps.name=?
+)
+`, mapName, mapName)
 	if err != nil {
 		return nil, err
 	}
@@ -177,6 +235,15 @@ func generateGraphData(ctx context.Context) (*graphData, error) {
 		seen[router] = true
 		seen[link] = true
 	}
+	for e, pos := range poss {
+		if !seen[e] {
+			graph.Net = append(graph.Net, Net{
+				ID:      e,
+				Pos:     pos,
+				Missing: true,
+			})
+		}
+	}
 	sort.Slice(graph.Router, func(i, j int) bool {
 		return graph.Router[i].Name < graph.Router[j].Name
 	})
@@ -186,8 +253,8 @@ func generateGraphData(ctx context.Context) (*graphData, error) {
 	return &graph, nil
 }
 
-func generateDot(ctx context.Context) (string, error) {
-	graph, err := generateGraphData(ctx)
+func generateDot(ctx context.Context, layout string) (string, error) {
+	graph, err := generateGraphData(ctx, layout)
 	if err != nil {
 		return "", err
 	}
@@ -228,15 +295,33 @@ AND map_id=(SELECT map_id FROM maps WHERE name=?)`, u.X, u.Y, id, mapName); err 
 	} else if n, err := res.RowsAffected(); err != nil {
 		log.Warningf("Failed to get rows affected for %q", id)
 		// Pretend to caller that it succeeded.
-	} else if n != 1 {
-		log.Errorf("Nothing updated. Does node %q not exist?", id)
-		http.Error(w, "Nothing updated", http.StatusInternalServerError)
+	} else if n == 0 {
+		if _, err := db.ExecContext(req.Context(), `
+INSERT INTO pos(node_id,x,y,map_id)
+VALUES(?,?,?, (SELECT map_id FROM maps WHERE name=?))
+`, id, u.X, u.Y, mapName); err != nil {
+			log.Error(err)
+			http.Error(w, "Failed to insert", http.StatusInternalServerError)
+			return
+		}
+	} else if n > 1 {
+		log.Errorf("More than one row affected for %q? WUT?!", id)
+		http.Error(w, "Multi update, wat?", http.StatusInternalServerError)
 		return
 	}
 }
 
 func renderHandler(w http.ResponseWriter, req *http.Request) {
-	dot, err := generateDot(req.Context())
+	req.ParseForm()
+	layout := defaultLayout
+	if v := req.Form.Get("layout"); map[string]bool{
+		"neato": true,
+		"circo": true,
+		"fdp":   true,
+	}[v] {
+		layout = v
+	}
+	dot, err := generateDot(req.Context(), layout)
 	if err != nil {
 		log.Error(err)
 		http.Error(w, "Failed to generate dot", http.StatusInternalServerError)
@@ -261,7 +346,7 @@ func renderHandler(w http.ResponseWriter, req *http.Request) {
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(req.Context(), "dot", "-T"+format)
 	cmd.Stdout = w
-	cmd.Stdin = bytes.NewBufferString(dot)
+	cmd.Stdin = io.TeeReader(bytes.NewBufferString(dot), os.Stdout)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		log.Errorf("graphviz: %v: %s\n%s", err, stderr.String(), dot)
@@ -274,14 +359,19 @@ func main() {
 	ctx := context.Background()
 
 	var err error
-	db, err = sql.Open("sqlite3", "netmap.sqlite")
+	db, err = sql.Open("sqlite3", *dbName)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer db.Close()
 
-	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
-		log.Fatalf("Failed to turn on foreign keys: %v", err)
+	for _, line := range []string{
+		`PRAGMA foreign_keys = ON`,
+		// `.load /usr/lib/sqlite3/pcre.so`,
+	} {
+		if _, err := db.ExecContext(ctx, line); err != nil {
+			log.Fatalf("Failed to turn on foreign keys: %v", err)
+		}
 	}
 
 	log.Info("Running…")
