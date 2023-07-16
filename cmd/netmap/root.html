@@ -15,6 +15,11 @@
 	  <option data-layout="{{.}}">{{.}}</option>
 	  {{end}}
 	</select>
+	<select id="map-selector">
+	  {{range .Maps}}
+	  <option data-id="{{.ID}}">{{.Name}}</option>
+	  {{end}}
+	</select>
 	<select id="router-selector">
 	  {{range .Router}}
 	  <option id="router-select-{{.ID}}" data-pos="{{.Pos}}" data-id="{{.ID}}">

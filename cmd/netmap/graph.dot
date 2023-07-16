@@ -5,6 +5,8 @@ strict graph {
 	Useful; dot, neato (allows manual), fdp, sfdp, circo
 	{{*/}}
   layout={{.Layout}}
+
+  /* Routers */
   {{range .Router -}}
   "{{.ID}}" [shape=box{{if .Pos -}}
   ,pos="{{.Pos}}!"
@@ -13,12 +15,17 @@ strict graph {
   ,label="{{.Name}}\n{{.ID}}"
   {{- end -}}]
   {{end}}
+  /* Networks */
   {{range .Net -}}
   "{{.ID}}"[{{if .Pos}}pos="{{.Pos}}!"{{end}}{{if .Missing}}color="red"{{end}}]
   {{end}}
+
+  /* links */
   {{range .Link -}}
   "{{.Router}}" -- "{{.Net}}"[label="Cost: {{.Cost}}"]
   {{end}}
+
+  /* Neighborships */
   {{range .Neigh -}}
   "{{.Node1}}" -- "{{.Node2}}" [label="{{.Link1}},{{.Link2}}",color="blue"]
   {{end}}

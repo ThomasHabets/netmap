@@ -2,10 +2,10 @@
     width: 100%;
 }
 #main-map {
-    max-width: 80%;
+    max-width: 100%;
 }
 #main-map object {
-    max-width: 80%;
+    max-width: 100%;
 }
 #main div {
     display: inline-block;
@@ -13,6 +13,8 @@
 }
 #main-controls {
     width: 10%;
-/*    float: right; */
-    position: relative;
+    float: left;
+    position: absolute;
+    left: 0;
+    border: 1px solid black;
 }

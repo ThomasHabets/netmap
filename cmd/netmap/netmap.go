@@ -24,10 +24,8 @@ import (
 )
 
 const (
-	// TODO
-	mapName = "main"
-
 	defaultLayout = "neato"
+	defaultMapName = "main"
 )
 
 var (
@@ -50,14 +48,16 @@ var (
 )
 
 func rootHandler(w http.ResponseWriter, req *http.Request) {
-	graph, err := generateGraphData(req.Context(), defaultLayout)
+	mapID := "25091816-e943-44e8-b1c5-5ffe24ba7310"
+	mapID= "85bb359a-df9d-45c7-bdf7-200b7f3e0202"
+	graph, err := generateGraphData(req.Context(), defaultLayout, mapID)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("Failed to generate graph: %v", err)
 		http.Error(w, "Failed to generate graph", http.StatusInternalServerError)
 		return
 	}
 	if err := rootTmpl.Execute(w, graph); err != nil {
-		log.Error(err)
+		log.Errorf("Failed to execute template: %w", err)
 		return
 	}
 }
@@ -80,24 +80,28 @@ type Link struct {
 	Cost   int
 }
 
+type mapview struct {
+	ID string
+	Name string
+}
+
 type graphData struct {
 	Layout  string
 	Layouts []string
+	Maps []mapview
 	Router  []Router
 	Net     []Net
 	Link    []Link
 	Neigh   []neigh
 }
 
-func getPositions(ctx context.Context) (map[string]string, error) {
+func getPositions(ctx context.Context, mapID string) (map[string]string, error) {
 	ret := make(map[string]string)
 	rows, err := db.QueryContext(ctx, `
 SELECT node_id,x,y
-FROM pos
-NATURAL JOIN maps
-WHERE maps.name=?
+FROM pos WHERE map_id=?
 ORDER BY node_id
-`, mapName)
+`, mapID)
 	if err != nil {
 		return nil, err
 	}
@@ -113,6 +117,7 @@ ORDER BY node_id
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	log.Info(ret)
 	return ret, nil
 }
 
@@ -170,8 +175,8 @@ FROM neigh
 	return ret, nil
 }
 
-func generateGraphData(ctx context.Context, layout string) (*graphData, error) {
-	poss, err := getPositions(ctx)
+func generateGraphData(ctx context.Context, layout,mapID string) (*graphData, error) {
+	poss, err := getPositions(ctx,mapID)
 	if err != nil {
 		return nil, err
 	}
@@ -191,18 +196,38 @@ func generateGraphData(ctx context.Context, layout string) (*graphData, error) {
 		Layout:  layout,
 		Neigh:   neigh,
 	}
+
+	// Load maps.
+	{
+		rows, err := db.QueryContext(ctx,`
+SELECT map_id, name
+FROM maps`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var e mapview
+			if err := rows.Scan(&e.ID, &e.Name); err != nil {
+				return nil, err
+			}
+			graph.Maps = append(graph.Maps, e)
+		}		
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+	}
+	
 	rows, err := db.QueryContext(ctx, `
 SELECT links.router, net, cost FROM links
 JOIN mapnodes ON links.router=mapnodes.router
-JOIN maps ON mapnodes.map_id=mapnodes.map_id
-WHERE maps.name=?
-AND links.net IN (
-  SELECT mapnodes.router
-  FROM mapnodes
-  JOIN maps ON mapnodes.map_id=mapnodes.map_id
-  WHERE maps.name=?
-)
-`, mapName, mapName)
+WHERE mapnodes.map_id=?
+-- AND links.net IN (
+--  SELECT mapnodes.router
+--   FROM mapnodes
+--  WHERE map_id=?
+--)
+`, mapID, mapID)
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +262,9 @@ AND links.net IN (
 		seen[router] = true
 		seen[link] = true
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	for e, pos := range poss {
 		if !seen[e] {
 			graph.Net = append(graph.Net, Net{
@@ -255,8 +283,8 @@ AND links.net IN (
 	return &graph, nil
 }
 
-func generateDot(ctx context.Context, layout string) (string, error) {
-	graph, err := generateGraphData(ctx, layout)
+func generateDot(ctx context.Context, layout,mapID string) (string, error) {
+	graph, err := generateGraphData(ctx, layout, mapID)
 	if err != nil {
 		return "", err
 	}
@@ -275,23 +303,25 @@ type update struct {
 func updateHandler(w http.ResponseWriter, req *http.Request) {
 	vars := mux.Vars(req)
 	id := strings.ReplaceAll(vars["id"], "__SLASH__", "/")
+	mapID := vars["map"]
+	mapID = "85bb359a-df9d-45c7-bdf7-200b7f3e0202"
 	b, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("Failed to read request body: %v", err)
 		http.Error(w, "Failed to read request", http.StatusInternalServerError)
 		return
 	}
 	var u update
 	if err := json.Unmarshal(b, &u); err != nil {
-		log.Error(err)
+		log.Errorf("Failed to parse request JSON: %v", err)
 		http.Error(w, "Failed to parse request JSON", http.StatusBadRequest)
 		return
 	}
 	if res, err := db.ExecContext(req.Context(), `
 UPDATE pos SET x=?,y=?
 WHERE node_id=?
-AND map_id=(SELECT map_id FROM maps WHERE name=?)`, u.X, u.Y, id, mapName); err != nil {
-		log.Error(err)
+AND map_id=?`, u.X, u.Y, id, mapID); err != nil {
+		log.Error("Failed to update: %v", err)
 		http.Error(w, "Failed to update", http.StatusInternalServerError)
 		return
 	} else if n, err := res.RowsAffected(); err != nil {
@@ -300,9 +330,9 @@ AND map_id=(SELECT map_id FROM maps WHERE name=?)`, u.X, u.Y, id, mapName); err 
 	} else if n == 0 {
 		if _, err := db.ExecContext(req.Context(), `
 INSERT INTO pos(node_id,x,y,map_id)
-VALUES(?,?,?, (SELECT map_id FROM maps WHERE name=?))
-`, id, u.X, u.Y, mapName); err != nil {
-			log.Error(err)
+VALUES(?,?,?,?)
+`, id, u.X, u.Y, mapID); err != nil {
+			log.Errorf("Failed to insert for ID %q into %q: %v", id, mapID, err)
 			http.Error(w, "Failed to insert", http.StatusInternalServerError)
 			return
 		}
@@ -316,6 +346,7 @@ VALUES(?,?,?, (SELECT map_id FROM maps WHERE name=?))
 func renderHandler(w http.ResponseWriter, req *http.Request) {
 	req.ParseForm()
 	layout := defaultLayout
+	mapID := ""
 	if v := req.Form.Get("layout"); map[string]bool{
 		"neato": true,
 		"circo": true,
@@ -323,9 +354,15 @@ func renderHandler(w http.ResponseWriter, req *http.Request) {
 	}[v] {
 		layout = v
 	}
-	dot, err := generateDot(req.Context(), layout)
+	if v := req.Form.Get("map"); v!="" {
+		// TODO: parse UUID.
+		mapID = v
+	}
+	mapID = "85bb359a-df9d-45c7-bdf7-200b7f3e0202"
+	
+	dot, err := generateDot(req.Context(), layout, mapID)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("Failed to generate dot: %v", err)
 		http.Error(w, "Failed to generate dot", http.StatusInternalServerError)
 		return
 	}
@@ -369,7 +406,6 @@ func main() {
 
 	for _, line := range []string{
 		`PRAGMA foreign_keys = ON`,
-		// `.load /usr/lib/sqlite3/pcre.so`,
 	} {
 		if _, err := db.ExecContext(ctx, line); err != nil {
 			log.Fatalf("Failed to turn on foreign keys: %v", err)
@@ -381,9 +417,8 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/", rootHandler)
 	r.HandleFunc("/render", renderHandler)
-	r.HandleFunc("/update/{id}", updateHandler)
+	r.HandleFunc("/update/{map}/{id}", updateHandler)
 	r.PathPrefix("/static/").Handler(http.FileServer(http.FS(fs)))
-	//r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir(dir))))
 	http.Handle("/", r)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

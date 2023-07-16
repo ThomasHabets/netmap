@@ -1,4 +1,5 @@
 var layout = "neato";
+var map = "main";
 
 function reload_map() {
     let parent = document.getElementById('main-map');
@@ -11,7 +12,7 @@ function reload_map() {
 	o.id = 'map-svg';
     };
     o.type = 'image/svg+xml';
-    o.data = `/render?layout=${layout}`;
+    o.data = `/render?layout=${layout}&map=${map}`;
     //o.style.visibility = 'hidden';
     //o.style="position:absolute;left:100000px"
     o.style = 'position: absolute; opacity: 0; z-index: -10000; height: 10px'
@@ -25,7 +26,11 @@ function router_change_onchange(e) {
     controls.style.display='none';
     
     var pos = document.getElementById('controls-pos');
-    pos.value = o.dataset.pos;
+    if (o.dataset.pos != "") {
+      pos.value = o.dataset.pos;
+    } else {
+      pos.value = "0,0"
+    }
     pos.dataset.id = o.dataset.id;
     controls.appendChild(pos);
     
@@ -46,7 +51,7 @@ function update_pos() {
     // TODO: CSRF
     let xy = pos.value.split(',');
     let xhr = new XMLHttpRequest();
-    xhr.open('POST', `/update/${pos.dataset.id.replace("/","__SLASH__")}`, true);
+    xhr.open('POST', `/update/${map}/${pos.dataset.id.replace("/","__SLASH__")}`, true);
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.addEventListener('load', (e) => {
 	reload_map();
@@ -70,6 +75,12 @@ window.addEventListener('load', (event) => {
     document.getElementById('layout-selector').addEventListener('change', (o) => {
 	console.log("Changing layout");
 	layout = o.target.options[o.target.selectedIndex].dataset.layout;
+	reload_map();
+    });
+
+    document.getElementById('map-selector').addEventListener('change', (o) => {
+	console.log("Changing map");
+	map = o.target.options[o.target.selectedIndex].dataset.id;
 	reload_map();
     });
 
